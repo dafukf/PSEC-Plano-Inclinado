@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Plano Inclinado - Descendo a Rampa</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .simulation-area {
+            width: 100%;
+            height: 300px;
+            position: relative;
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            background-color: #f9f9f9;
+            overflow: hidden;
+        }
+        
+        .plane {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #333;
+            transform-origin: left bottom;
+        }
+        
+        .object {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #3498db;
+            border-radius: 5px;
+            bottom: 2px;
+            left: 50px;
+            transition: transform 0.1s linear;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        .value-display {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        
+        .forces {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+        }
+        
+        .force-vector {
+            position: absolute;
+            background-color: rgba(231, 76, 60, 0.7);
+            height: 2px;
+            transform-origin: left center;
+        }
+        
+        .force-label {
+            position: absolute;
+            font-size: 12px;
+            color: #e74c3c;
+        }
+        
+        .formula {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Simulador de Plano Inclinado - Descendo a Rampa</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="angle">Ângulo do Plano (θ):</label>
+                <input type="range" id="angle" min="0" max="45" value="15" step="1">
+                <span class="value-display" id="angle-value">15°</span>
+            </div>
+            
+            <div class="control-group">
+                <label for="mass">Massa do Objeto (m):</label>
+                <input type="range" id="mass" min="1" max="10" value="5" step="0.5">
+                <span class="value-display" id="mass-value">5 kg</span>
+            </div>
+            
+            <div class="control-group">
+                <label for="friction">Coeficiente de Atrito (μ):</label>
+                <input type="range" id="friction" min="0" max="1" value="0.2" step="0.05">
+                <span class="value-display" id="friction-value">0.20</span>
+            </div>
+        </div>
+        
+        <div class="simulation-area" id="simulation">
+            <div class="plane" id="plane"></div>
+            <div class="object" id="object"></div>
+        </div>
+        
+        <div class="buttons">
+            <button id="start-btn">Iniciar Simulação</button>
+            <button id="reset-btn" disabled>Reiniciar</button>
+        </div>
+        
+        <div class="forces">
+            <h3>Forças Atuantes:</h3>
+            <p id="forces-info">Calculando...</p>
+        </div>
+        
+        <div class="formula">
+            <h3>Fórmulas:</h3>
+            <p>Peso (P) = m × g</p>
+            <p>Força Normal (N) = P × cos(θ)</p>
+            <p>Força Paralela (P<sub>∥</sub>) = P × sin(θ)</p>
+            <p>Força de Atrito (F<sub>at</sub>) = μ × N</p>
+            <p>Força Resultante (F<sub>res</sub>) = P<sub>∥</sub> - F<sub>at</sub></p>
+            <p>Aceleração (a) = F<sub>res</sub> / m</p>
+        </div>
+    </div>
+
+    <script>
+        // Constantes
+        const g = 9.8; // aceleração da gravidade (m/s²)
+        const scale = 2; // escala para visualização das forças
+        const pixelToMeter = 0.01; // fator de conversão de pixels para metros
+        
+        // Elementos DOM
+        const angleSlider = document.getElementById('angle');
+        const angleValue = document.getElementById('angle-value');
+        const massSlider = document.getElementById('mass');
+        const massValue = document.getElementById('mass-value');
+        const frictionSlider = document.getElementById('friction');
+        const frictionValue = document.getElementById('friction-value');
+        const plane = document.getElementById('plane');
+        const object = document.getElementById('object');
+        const simulation = document.getElementById('simulation');
+        const forcesInfo = document.getElementById('forces-info');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        
+        // Variáveis de estado
+        let animationId = null;
+        let isSimulating = false;
+        let startTime = null;
+        let initialPosition = 50;
+        
+        // Event listeners
+        angleSlider.addEventListener('input', updateSimulation);
+        massSlider.addEventListener('input', updateSimulation);
+        frictionSlider.addEventListener('input', updateSimulation);
+        startBtn.addEventListener('click', startSimulation);
+        resetBtn.addEventListener('click', resetSimulation);
+        
+        // Inicializa a simulação
+        updateSimulation();
+        
+        function updateSimulation() {
+            if (isSimulating) return;
+            
+            // Atualiza os valores exibidos
+            const angle = parseInt(angleSlider.value);
+            const mass = parseFloat(massSlider.value);
+            const friction = parseFloat(frictionSlider.value);
+            
+            angleValue.textContent = `${angle}°`;
+            massValue.textContent = `${mass} kg`;
+            frictionValue.textContent = friction.toFixed(2);
+            
+            // Atualiza a inclinação do plano (agora positivo para baixo)
+            plane.style.transform = `rotate(${-angle}deg)`;
+            
+            // Remove vetores de força antigos
+            document.querySelectorAll('.force-vector, .force-label').forEach(el => el.remove());
+            
+            // Calcula as forças
+            const P = mass * g; // Peso (N)
+            const N = P * Math.cos(angle * Math.PI / 180); // Normal (N)
+            const P_parallel = P * Math.sin(angle * Math.PI / 180); // Componente paralela (N)
+            const F_at = friction * N; // Força de atrito (N)
+            const F_res = P_parallel - F_at; // Força resultante (N)
+            const acceleration = F_res > 0 ? F_res / mass : 0; // Aceleração (m/s²)
+            
+            // Determina se o objeto está em movimento
+            const isMoving = F_res > 0.01;
+            
+            // Posiciona o objeto no plano (corrigido para descer)
+            const objectBottom = Math.tan(angle * Math.PI / 180) * initialPosition + 2;
+            
+            object.style.left = `${initialPosition}px`;
+            object.style.bottom = `${objectBottom}px`;
+            
+            // Desenha os vetores de força
+            const objectCenter = {
+                x: initialPosition + 20,
+                y: simulation.offsetHeight - (objectBottom + 20)
+            };
+            
+            // Força Peso (P) - para baixo
+            drawForceVector(objectCenter.x, objectCenter.y, 0, P * scale, 'P', '#e74c3c');
+            
+            // Força Normal (N) - perpendicular ao plano
+            drawForceVector(objectCenter.x, objectCenter.y, 90 - angle, N * scale, 'N', '#2ecc71');
+            
+            // Componente paralela do peso (P∥) - agora para baixo do plano
+            drawForceVector(objectCenter.x, objectCenter.y, -angle, P_parallel * scale, 'P∥', '#3498db');
+            
+            // Força de Atrito (Fat) - oposta ao movimento (para cima do plano)
+            if (isMoving) {
+                drawForceVector(objectCenter.x, objectCenter.y, 180 - angle, F_at * scale, 'Fat', '#f39c12');
+            } else {
+                drawForceVector(objectCenter.x, objectCenter.y, 180 - angle, P_parallel * scale, 'Fat', '#f39c12');
+            }
+            
+            // Atualiza as informações das forças
+            forcesInfo.innerHTML = `
+                <p><strong>Peso (P):</strong> ${P.toFixed(2)} N (m × g = ${mass} × 9.8)</p>
+                <p><strong>Força Normal (N):</strong> ${N.toFixed(2)} N (P × cosθ = ${P.toFixed(2)} × ${Math.cos(angle * Math.PI / 180).toFixed(4)})</p>
+                <p><strong>Componente Paralela (P∥):</strong> ${P_parallel.toFixed(2)} N (P × sinθ = ${P.toFixed(2)} × ${Math.sin(angle * Math.PI / 180).toFixed(4)})</p>
+                <p><strong>Força de Atrito (Fat):</strong> ${F_at.toFixed(2)} N (μ × N = ${friction.toFixed(2)} × ${N.toFixed(2)})</p>
+                <p><strong>Força Resultante:</strong> ${F_res.toFixed(2)} N (P∥ - Fat)</p>
+                <p><strong>Aceleração:</strong> ${acceleration.toFixed(2)} m/s² (Fres / m)</p>
+                <p><strong>Estado:</strong> ${isMoving ? 'Objeto descerá o plano' : 'Objeto permanecerá em repouso'}</p>
+            `;
+        }
+        
+        function drawForceVector(x, y, angle, magnitude, label, color) {
+            if (magnitude < 0.1) return;
+            
+            const angleRad = angle * Math.PI / 180;
+            const endX = x + magnitude * Math.cos(angleRad);
+            const endY = y - magnitude * Math.sin(angleRad);
+            
+            const vector = document.createElement('div');
+            vector.className = 'force-vector';
+            vector.style.left = `${x}px`;
+            vector.style.top = `${y}px`;
+            vector.style.width = `${magnitude}px`;
+            vector.style.transform = `rotate(${angle}deg)`;
+            vector.style.backgroundColor = color;
+            
+            const labelEl = document.createElement('div');
+            labelEl.className = 'force-label';
+            labelEl.textContent = label;
+            labelEl.style.left = `${endX}px`;
+            labelEl.style.top = `${endY}px`;
+            labelEl.style.color = color;
+            
+            simulation.appendChild(vector);
+            simulation.appendChild(labelEl);
+        }
+        
+        function startSimulation() {
+            if (isSimulating) return;
+            
+            const angle = parseInt(angleSlider.value);
+            const mass = parseFloat(massSlider.value);
+            const friction = parseFloat(frictionSlider.value);
+            
+            // Calcula as forças
+            const P = mass * g;
+            const N = P * Math.cos(angle * Math.PI / 180);
+            const P_parallel = P * Math.sin(angle * Math.PI / 180);
+            const F_at = friction * N;
+            const F_res = P_parallel - F_at;
+            
+            if (F_res <= 0.01) {
+                alert('A força resultante é insuficiente para mover o objeto com estes parâmetros!');
+                return;
+            }
+            
+            isSimulating = true;
+            startTime = null;
+            startBtn.disabled = true;
+            resetBtn.disabled = false;
+            angleSlider.disabled = true;
+            massSlider.disabled = true;
+            frictionSlider.disabled = true;
+            
+            animationId = requestAnimationFrame(animateObject);
+        }
+        
+        function animateObject(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsedTime = (timestamp - startTime) / 1000;
+            
+            const angle = parseInt(angleSlider.value);
+            const mass = parseFloat(massSlider.value);
+            const friction = parseFloat(frictionSlider.value);
+            
+            // Calcula a aceleração
+            const P = mass * g;
+            const N = P * Math.cos(angle * Math.PI / 180);
+            const P_parallel = P * Math.sin(angle * Math.PI / 180);
+            const F_at = friction * N;
+            const F_res = P_parallel - F_at;
+            const acceleration = F_res / mass;
+            
+            // Distância percorrida (s = 0.5 * a * t²)
+            const distance = 0.5 * acceleration * elapsedTime * elapsedTime;
+            const distancePx = distance / pixelToMeter;
+            
+            // Nova posição do objeto (agora desce o plano)
+            const newLeft = initialPosition + distancePx * Math.cos(angle * Math.PI / 180);
+            const newBottom = Math.tan(angle * Math.PI / 180) * newLeft + 2;
+            
+            object.style.left = `${newLeft}px`;
+            object.style.bottom = `${newBottom}px`;
+            
+            // Atualiza os vetores de força durante o movimento
+            updateForceVectors(newLeft, angle, P, N, P_parallel, F_at, F_res > 0.01);
+            
+            if (newLeft > simulation.offsetWidth + 40) {
+                resetBtn.textContent = 'Recomeçar';
+                cancelAnimationFrame(animationId);
+                return;
+            }
+            
+            animationId = requestAnimationFrame(animateObject);
+        }
+        
+        function updateForceVectors(leftPos, angle, P, N, P_parallel, F_at, isMoving) {
+            // Remove vetores antigos
+            document.querySelectorAll('.force-vector, .force-label').forEach(el => el.remove());
+            
+            const objectBottom = Math.tan(angle * Math.PI / 180) * leftPos + 2;
+            const objectCenter = {
+                x: leftPos + 20,
+                y: simulation.offsetHeight - (objectBottom + 20)
+            };
+            
+            // Redesenha todos os vetores
+            drawForceVector(objectCenter.x, objectCenter.y, 0, P * scale, 'P', '#e74c3c');
+            drawForceVector(objectCenter.x, objectCenter.y, 90 - angle, N * scale, 'N', '#2ecc71');
+            drawForceVector(objectCenter.x, objectCenter.y, -angle, P_parallel * scale, 'P∥', '#3498db');
+            
+            if (isMoving) {
+                drawForceVector(objectCenter.x, objectCenter.y, 180 - angle, F_at * scale, 'Fat', '#f39c12');
+            } else {
+                drawForceVector(objectCenter.x, objectCenter.y, 180 - angle, P_parallel * scale, 'Fat', '#f39c12');
+            }
+        }
+        
+        function resetSimulation() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            isSimulating = false;
+            startBtn.disabled = false;
+            resetBtn.disabled = true;
+            resetBtn.textContent = 'Reiniciar';
+            angleSlider.disabled = false;
+            massSlider.disabled = false;
+            frictionSlider.disabled = false;
+            
+            const angle = parseInt(angleSlider.value);
+            const objectBottom = Math.tan(angle * Math.PI / 180) * initialPosition + 2;
+            
+            object.style.left = `${initialPosition}px`;
+            object.style.bottom = `${objectBottom}px`;
+            
+            updateSimulation();
+        }
+    </script>
+</body>
+</html>
